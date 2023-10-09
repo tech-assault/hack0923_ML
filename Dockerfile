@@ -1,8 +1,11 @@
-FROM python:3.10
+FROM python:3.10-slim
 
-COPY ml /app
 WORKDIR /app
 
-RUN pip install -r requirements.txt
+COPY ./requirements.txt .
 
-CMD ["python", "app.py"]
+COPY ./ml/ .
+
+RUN pip3 install -r requirements.txt --no-cache-dir
+
+CMD ["uvicorn", "main:main_app", "--host", "127.0.0.1", "--port", "9000"]
