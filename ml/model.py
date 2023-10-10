@@ -4,6 +4,10 @@ import pickle
 import pandas as pd
 import numpy as np
 
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+
+
 MODEL = 'pickle_model/model_cbr.pkl'
 CALENDAR = 'pickle_model/calendar_mini.csv'
 
@@ -76,11 +80,10 @@ def prepare_data(data_list):
                                    axis=1)  # удалим столбцец 'is_active'
 
     # Удалим отрицательные значения
-    mask_negativ = (
-            (activ_store['sales_units'] < 0) | (
+    mask_negativ = ((activ_store['sales_units'] < 0) | (
                 activ_store['sales_units_promo'] < 0) | (
-                    activ_store['sales_rub'] < 0) |
-            (activ_store['sales_rub_promo'] < 0))
+                                activ_store['sales_rub'] < 0) \
+                    | (activ_store['sales_rub_promo'] < 0))
     # удаляем строки, соответствующие маске, из activ_store
     activ_store = activ_store[~mask_negativ]
 
@@ -116,16 +119,16 @@ def prepare_data(data_list):
 
     # удалим те строки с промо, у которых есть продажи без промо
     activ_store = activ_store[
-        ~(activ_store['sales_type'] == 1) & (
-            activ_store['sku'].isin(
-                activ_store.loc[activ_store['sales_type'] == 0, 'sku']))]
+        ~(activ_store['sales_type'] == 1) & (activ_store['sku'] \
+                                             .isin(
+            activ_store.loc[activ_store['sales_type'] == 0, 'sku']))]
     # удалим столбцы 'sales_type', 'sales_units_promo', 'sales_rub_promo'
     activ_store = activ_store.drop(
         ['sales_type', 'sales_units_promo', 'sales_rub_promo'], axis=1)
 
     # Добавим признак цена за единицу товара 'price_units'
     activ_store['price_units'] = (
-            activ_store['sales_rub'] / activ_store['sales_units']).round(2)
+                activ_store['sales_rub'] / activ_store['sales_units']).round(2)
 
     # Проведем НОРМАЛИЗАЦИЮ числовых признаков: sales_units, price_units и sales_rub
     # нормализация продажи в штуках
@@ -133,21 +136,21 @@ def prepare_data(data_list):
     sales_units_sd = activ_store.sales_units.std()
     # Сформируем целевой признак 'sales_units_stand'
     activ_store['sales_units_stand'] = (
-                                               activ_store.sales_units - sales_units_mean) / sales_units_sd
+                                                   activ_store.sales_units - sales_units_mean) / sales_units_sd
 
     # нормализация продажи в рублях
     sales_rub_mean = activ_store.sales_rub.mean()
     sales_rub_sd = activ_store.sales_rub.std()
     # Сформируем признак 'sales_rub_stand'
     activ_store['sales_rub_stand'] = (
-                                             activ_store.sales_rub - sales_rub_mean) / sales_rub_sd
+                                                 activ_store.sales_rub - sales_rub_mean) / sales_rub_sd
 
     # нормализация доли промо продажи в рублях за штуку
     price_units_mean = activ_store.price_units.mean()
     price_units_sd = activ_store.price_units.std()
     # Сформируем признак 'price_units_stand'
     activ_store['price_units_stand'] = (
-                                               activ_store.price_units - price_units_mean) / price_units_sd
+                                                   activ_store.price_units - price_units_mean) / price_units_sd
 
     # Разделим признаки на числовые и категориальные, создадим списки:
     numeric = activ_store[activ_store.select_dtypes(include='number').columns]
@@ -246,27 +249,6 @@ def prepare_data(data_list):
     data = clast_activ_store.copy()
     return data
 
-    def predict_sale(data):
-        # Выполнение предсказания с использованием обученной модели model
-        try:
-            predicted_sale = model.predict(data)
-        except:
-            print(
-                'по данному товару прогноз невозможен, проверьте данные по товару или магазину')
-
-        return predicted_sale[0]
-
-    # формирование списка предсказанной цены
-
-    predicted_sales = data.apply(
-        lambda row: predict_sale(row['pr_sales_in_units'], row['st_id'],
-                                 row['pr_sku_id']), axis=1).tolist()
-
-
-def cleaning_data(data):
-    # обработка данных
-
-    return data
 
 
 def forecast_real(sales: dict, item_info: dict, store_info: dict) -> list:
@@ -288,11 +270,13 @@ def forecast_real(sales: dict, item_info: dict, store_info: dict) -> list:
     try:
         for sale in sales:
             predicted_sale = model.predict(
-                cleaning_data({**sale, **store_info, **item_info,
+                prepare_data({**sale, **store_info, **item_info,
                                'holiday': calendar[sale['date']]}))
-    except KeyError:
-        print('Ошибка в data')
-
+    except KeyError as error_message:
+        x = error_message
+        print('Ошибка в data', error_message)
+    except UnboundLocalError as error_message:
+        print(error_message)
         print('по данному товару прогноз невозможен, '
               'проверьте данные по товару или магазину')
     # predicted_sale == [10,15,20,30,20,2,...]

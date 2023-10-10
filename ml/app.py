@@ -5,39 +5,41 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, status
 
-from ml.schemas import Data
-from model import forecast_test, forecast_real
+from model import forecast_real, forecast_test
 
 URL_CATEGORIES = "categories"
 URL_SALES = "sales"
 URL_STORES = "shops"
 URL_FORECAST = "forecast/"
 
-api_port = os.environ.get("API_PORT", "8001")
-api_host = os.environ.get("API_PORT", "localhost")
+BACK_PORT = os.getenv("BACK_PORT", "8000")
+BACK_HOST = os.getenv("BACK_HOST", "localhost")
 
-_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-_logger.setLevel(logging.DEBUG)
+logger.setLevel(os.getenv('LOG_LEVEL', 'INFO'))
+
 handler_m = logging.StreamHandler()
+
 formatter_m = logging.Formatter(
         "%(name)s %(asctime)s %(levelname)s %(message)s")
 handler_m.setFormatter(formatter_m)
-_logger.addHandler(handler_m)
+
+logger.addHandler(handler_m)
 
 app_router = APIRouter(prefix='/api/v1')
 
 
 def get_address(resource):
-    return "http://" + api_host + ":" + api_port + "/api/" + resource
+    return f"http://{BACK_HOST}:{BACK_PORT}/api/{resource}"
 
 
 def get_stores():
     stores_url = get_address(URL_STORES)
     resp = requests.get(stores_url)
     if resp.status_code != 200:
-        _logger.debug(f'{resp.status_code} {stores_url}')
-        _logger.warning("Could not get stores list")
+        logger.debug(f'{resp.status_code} {stores_url}')
+        logger.warning("Could not get stores list")
         return []
     return resp.json()["data"]
 
@@ -51,8 +53,8 @@ def get_sales(store=None, sku=None):
         params["sku"] = sku
     resp = requests.get(sale_url, params=params)
     if resp.status_code != 200:
-        _logger.debug(f'{resp.status_code} {sale_url}')
-        _logger.warning("Could not get sales history")
+        logger.debug(f'{resp.status_code} {sale_url}')
+        logger.warning("Could not get sales history")
         return []
     return resp.json()["data"]
 
@@ -61,14 +63,14 @@ def get_categs_info():
     categs_url = get_address(URL_CATEGORIES)
     resp = requests.get(categs_url)
     if resp.status_code != 200:
-        _logger.debug(f'{resp.status_code} {categs_url}')
-        _logger.warning("Could not get category info")
+        logger.debug(f'{resp.status_code} {categs_url}')
+        logger.warning("Could not get category info")
         return {}
     result = {el["sku"]: el for el in resp.json()["data"]}
     return result
 
 
-@app_router.get('/predict', status_code=status.HTTP_200_OK)
+@app_router.get('/predict/', status_code=status.HTTP_200_OK)
 def main():
     today = date.today()
     forecast_dates = [today + timedelta(days=d) for d in range(1, 14)]
@@ -79,7 +81,8 @@ def main():
         for item in get_sales(store=store["store"]):
             item_info = categs_info[item["sku"]]
             sales = item["fact"]
-            prediction = forecast_real(sales, item_info, store)
+            prediction = forecast_test(sales, item_info, store)
+            # prediction = forecast_real(sales, item_info, store)
             result.append({"store": store["store"],
                            "forecast_date": today.strftime("%Y-%m-%d"),
                            "sku": item["sku"],
